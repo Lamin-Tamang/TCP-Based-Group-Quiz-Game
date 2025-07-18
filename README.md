@@ -1,4 +1,3 @@
-# TCPQuizGame
 # TCP-Based Group Quiz Game
 
 This is a network-based multiple-choice quiz game developed in C using TCP sockets. It supports 2–10 players simultaneously, where all participants take the quiz together in real-time. At the end of the quiz, players can see their individual results, including which questions were answered correctly or incorrectly, and the top scorer(s) are displayed to all clients.
