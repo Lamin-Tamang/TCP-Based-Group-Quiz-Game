@@ -12,6 +12,7 @@
 #define MAX_Q_LEN 256
 #define MAX_OPT_LEN 100
 #define MAX_RETRIES 3
+#define MAX_QUESTIONS 100
 
 typedef struct {
     int socket;
@@ -20,6 +21,7 @@ typedef struct {
     int active;
     int answer_received;
     char current_answer;
+    char answers[MAX_QUESTIONS]; 
 } Client;
 
 typedef struct {
@@ -52,14 +54,48 @@ void send_to_client(int idx, const char *msg) {
 void send_question_to_all() {
     char buffer[1024];
     if (group_question_index >= total_questions) {
-        snprintf(buffer, sizeof(buffer), "END|Quiz Over! Final Scores:\n");
+        char final_scores[2048];
+        snprintf(final_scores, sizeof(final_scores), "END|Quiz Over! Final Scores:\n");
         for (int i = 0; i < client_count; i++) {
             char score_line[128];
             snprintf(score_line, sizeof(score_line), "%s: %d\n", clients[i].name, clients[i].score);
-            strcat(buffer, score_line);
+            strcat(final_scores, score_line);
         }
+
+        int top_score = 0;
         for (int i = 0; i < client_count; i++) {
-            send_to_client(i, buffer);
+            if (clients[i].score > top_score)
+                top_score = clients[i].score;
+        }
+
+        char topscorers[512] = "Top scorer(s): ";
+        int first = 1;
+        for (int i = 0; i < client_count; i++) {
+            if (clients[i].score == top_score) {
+                if (!first) strcat(topscorers, ", ");
+                strcat(topscorers, clients[i].name);
+                first = 0;
+            }
+        }
+        strcat(topscorers, "\n");
+        strcat(final_scores, topscorers);
+
+        for (int i = 0; i < client_count; i++) {
+            send_to_client(i, final_scores);
+
+            char personal[4096];
+            snprintf(personal, sizeof(personal), "\nDetailed results:\n%s:\n", clients[i].name);
+            for (int q = 0; q < total_questions; q++) {
+                char given = clients[i].answers[q];
+                char correct = 'A' + questions[q].correct_index;
+                const char *correctness = (given == correct) ? "Correct" : "Wrong";
+                char line[256];
+                snprintf(line, sizeof(line), " Q%d: Your answer: %c - %s | Correct answer: %c\n",
+                         q + 1, given ? given : '-', correctness, correct);
+                strcat(personal, line);
+            }
+            send_to_client(i, personal);
+
             if (group_retries < MAX_RETRIES) {
                 char retry_msg[128];
                 int remaining = MAX_RETRIES - group_retries;
@@ -69,8 +105,24 @@ void send_question_to_all() {
                 clients[i].active = 0;
             }
         }
+
+        printf("\n--- Detailed Results on Server ---\n");
+        for (int i = 0; i < client_count; i++) {
+            if (!clients[i].active) continue;
+            printf("%s:\n", clients[i].name);
+            for (int q = 0; q < total_questions; q++) {
+                char given = clients[i].answers[q];
+                char correct = 'A' + questions[q].correct_index;
+                printf(" Q%d: Your answer: %c - %s | Correct answer: %c\n", q + 1,
+                       given ? given : '-',
+                       (given == correct) ? "Correct" : "Wrong",
+                       correct);
+            }
+            printf("\n");
+        }
         return;
     }
+
     snprintf(buffer, sizeof(buffer), "Q%d: %s\nA. %s\nB. %s\nC. %s\nD. %s\n",
              group_question_index + 1,
              questions[group_question_index].question,
@@ -78,6 +130,7 @@ void send_question_to_all() {
              questions[group_question_index].options[1],
              questions[group_question_index].options[2],
              questions[group_question_index].options[3]);
+
     for (int i = 0; i < client_count; i++) {
         send_to_client(i, buffer);
         clients[i].answer_received = 0;
@@ -94,6 +147,7 @@ void reset_group_quiz() {
         clients[i].active = 1;
         clients[i].answer_received = 0;
         clients[i].current_answer = 0;
+        memset(clients[i].answers, 0, sizeof(clients[i].answers));
     }
 }
 
@@ -143,13 +197,14 @@ void *client_handler(void *arg) {
             if (ans >= 'A' && ans <= 'D') {
                 clients[idx].current_answer = ans;
                 clients[idx].answer_received = 1;
+                clients[idx].answers[group_question_index] = ans;
                 answers_collected++;
             }
         }
 
         if (answers_collected == client_count) {
             for (int i = 0; i < client_count; i++) {
-                if (clients[i].current_answer == 'A' + questions[group_question_index].correct_index) {
+                if (clients[i].current_answer == ('A' + questions[group_question_index].correct_index)) {
                     clients[i].score++;
                 }
             }
@@ -212,6 +267,7 @@ int main() {
         clients[client_count].active = 1;
         clients[client_count].answer_received = 0;
         clients[client_count].current_answer = 0;
+        memset(clients[client_count].answers, 0, sizeof(clients[client_count].answers));
 
         int *idx = malloc(sizeof(int));
         *idx = client_count;

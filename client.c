@@ -10,7 +10,7 @@
 int main() {
     int sock;
     struct sockaddr_in serv_addr;
-    char buffer[1024];
+    char buffer[4096];
     char name[50];
     char answer[5];
     int waiting_retry = 0;
@@ -41,7 +41,7 @@ int main() {
 
     while (1) {
         memset(buffer, 0, sizeof(buffer));
-        int val = recv(sock, buffer, sizeof(buffer), 0);
+        int val = recv(sock, buffer, sizeof(buffer) - 1, 0);
         if (val <= 0) {
             printf("Disconnected from server.\n");
             break;
