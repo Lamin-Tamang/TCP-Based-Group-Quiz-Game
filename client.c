@@ -5,7 +5,7 @@
 #include <arpa/inet.h>
 #include <ctype.h>
 
-#define PORT 12343
+#define PORT 12322
 
 int main() {
     int sock;
@@ -13,6 +13,7 @@ int main() {
     char buffer[1024];
     char name[50];
     char answer[5];
+    int waiting_retry = 0;
 
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
@@ -36,10 +37,7 @@ int main() {
     fgets(name, sizeof(name), stdin);
     name[strcspn(name, "\n")] = 0;
     send(sock, name, strlen(name), 0);
-    printf("Client has been connected.\n");
-
-    int quiz_over = 0;
-    int waiting_retry = 0;
+    printf("Waiting for more players to join...\n");
 
     while (1) {
         memset(buffer, 0, sizeof(buffer));
@@ -48,43 +46,32 @@ int main() {
             printf("Disconnected from server.\n");
             break;
         }
-
         buffer[val] = '\0';
 
         if (strncmp(buffer, "END|", 4) == 0) {
             printf("\n%s\n", buffer + 4);
-            quiz_over = 1;
+            waiting_retry = 1;
             continue;
         }
 
         if (strncmp(buffer, "RETRY|", 6) == 0) {
             printf("%s\n", buffer + 6);
-            waiting_retry = 1;
-
             while (1) {
                 printf("Enter your choice (R to retry, Q to quit): ");
                 fgets(answer, sizeof(answer), stdin);
                 answer[strcspn(answer, "\n")] = 0;
-
                 if (strlen(answer) == 1 && (toupper(answer[0]) == 'R' || toupper(answer[0]) == 'Q')) {
                     send(sock, answer, 1, 0);
-                    if (toupper(answer[0]) == 'R') {
-                        waiting_retry = 0;
-                        quiz_over = 0;
-                    } else if (toupper(answer[0]) == 'Q') {
-                        printf("Quitting...\n");
-                        close(sock);
-                        exit(0);
-                    }
                     break;
                 } else {
                     printf("Invalid input. Please enter 'R' or 'Q'.\n");
                 }
             }
+            waiting_retry = 0;
             continue;
         }
 
-        if (quiz_over) continue;
+        if (waiting_retry) continue;
 
         printf("\n%s\n", buffer);
 
